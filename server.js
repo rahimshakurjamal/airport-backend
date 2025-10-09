@@ -24,9 +24,18 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Initialize database tables
+// Initialize database tables - DROP AND RECREATE to fix schema issues
 const initDB = async () => {
   try {
+    console.log('Dropping old tables if they exist...');
+    
+    // Drop old tables to recreate with correct schema
+    await pool.query('DROP TABLE IF EXISTS guests CASCADE');
+    await pool.query('DROP TABLE IF EXISTS cars CASCADE');
+    
+    console.log('Creating fresh tables with correct schema...');
+    
+    // Create guests table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS guests (
         id SERIAL PRIMARY KEY,
@@ -43,6 +52,7 @@ const initDB = async () => {
       )
     `);
 
+    // Create cars table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cars (
         id INTEGER PRIMARY KEY,
@@ -137,6 +147,8 @@ app.post('/api/guests', async (req, res) => {
   try {
     const { name, flight, airline, airlineName, origin, eta, status, carAssigned } = req.body;
     
+    console.log('Creating guest:', { name, flight, airline, airlineName, origin, eta, status, carAssigned });
+    
     const result = await pool.query(
       `INSERT INTO guests (name, flight, airline, airline_name, origin, eta, status, car_assigned) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
@@ -157,6 +169,7 @@ app.post('/api/guests', async (req, res) => {
       carAssigned: row.car_assigned
     };
     
+    console.log('Guest created successfully:', guest);
     res.status(201).json(guest);
   } catch (error) {
     console.error('Error creating guest:', error);
