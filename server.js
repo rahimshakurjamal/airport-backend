@@ -384,7 +384,6 @@ app.get('/api/flight-status', async (req, res) => {
   }
 
   try {
-    // AviationStack API call
     const apiKey = process.env.AVIATIONSTACK_API_KEY;
     
     if (!apiKey) {
@@ -392,18 +391,24 @@ app.get('/api/flight-status', async (req, res) => {
       return res.json({ status: 'On Time' });
     }
 
+    console.log(`Fetching flight status for ${airline}${flight}...`);
+
     const response = await axios.get('http://api.aviationstack.com/v1/flights', {
       params: {
         access_key: apiKey,
         flight_iata: `${airline}${flight}`,
         limit: 1
       },
-      timeout: 5000
+      timeout: 10000
     });
+
+    console.log(`AviationStack API response for ${airline}${flight}:`, JSON.stringify(response.data, null, 2));
 
     if (response.data && response.data.data && response.data.data.length > 0) {
       const flightData = response.data.data[0];
       let status = 'On Time';
+
+      console.log(`Flight ${airline}${flight} raw status from API: ${flightData.flight_status}`);
 
       // Map AviationStack status to our status
       if (flightData.flight_status) {
@@ -420,15 +425,14 @@ app.get('/api/flight-status', async (req, res) => {
         }
       }
 
-      console.log(`Flight ${airline}${flight} status: ${status}`);
+      console.log(`Flight ${airline}${flight} mapped status: ${status}`);
       return res.json({ status });
     } else {
-      console.log(`No data found for flight ${airline}${flight}`);
+      console.log(`No data found for flight ${airline}${flight} - API returned empty data array`);
       return res.json({ status: 'On Time' });
     }
   } catch (error) {
-    console.error('Error fetching flight status:', error.message);
-    // Return default status on error to prevent frontend issues
+    console.error(`Error fetching flight status for ${airline}${flight}:`, error.message);
     return res.json({ status: 'On Time' });
   }
 });
