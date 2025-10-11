@@ -24,22 +24,17 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Initialize database tables - DROP AND RECREATE to fix schema issues
+// Initialize database tables - CREATE if not exists (preserve data)
 const initDB = async () => {
   try {
-    console.log('Dropping old tables if they exist...');
+    console.log('Initializing database tables...');
     
-    // Drop old tables to recreate with correct schema
-    await pool.query('DROP TABLE IF EXISTS guests CASCADE');
-    await pool.query('DROP TABLE IF EXISTS cars CASCADE');
-    
-    console.log('Creating fresh tables with correct schema...');
-    
-    // Create guests table
+    // Create guests table (only if it doesn't exist - preserves data)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS guests (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
+        phone VARCHAR(50),
         flight VARCHAR(50) NOT NULL,
         airline VARCHAR(10) NOT NULL,
         airline_name VARCHAR(255),
@@ -51,8 +46,14 @@ const initDB = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    
+    // Add phone column if it doesn't exist (for existing databases)
+    await pool.query(`
+      ALTER TABLE guests 
+      ADD COLUMN IF NOT EXISTS phone VARCHAR(50)
+    `);
 
-    // Create cars table
+    // Create cars table (only if it doesn't exist - preserves data)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS cars (
         id INTEGER PRIMARY KEY,
@@ -96,6 +97,7 @@ app.get('/api/guests', async (req, res) => {
     const guests = result.rows.map(row => ({
       id: row.id,
       name: row.name,
+      phone: row.phone || '',
       flight: row.flight,
       airline: row.airline,
       airlineName: row.airline_name,
@@ -126,6 +128,7 @@ app.get('/api/guests/:id', async (req, res) => {
     const guest = {
       id: row.id,
       name: row.name,
+      phone: row.phone || '',
       flight: row.flight,
       airline: row.airline,
       airlineName: row.airline_name,
@@ -145,21 +148,22 @@ app.get('/api/guests/:id', async (req, res) => {
 // Create new guest
 app.post('/api/guests', async (req, res) => {
   try {
-    const { name, flight, airline, airlineName, origin, eta, status, carAssigned } = req.body;
+    const { name, phone, flight, airline, airlineName, origin, eta, status, carAssigned } = req.body;
     
-    console.log('Creating guest:', { name, flight, airline, airlineName, origin, eta, status, carAssigned });
+    console.log('Creating guest:', { name, phone, flight, airline, airlineName, origin, eta, status, carAssigned });
     
     const result = await pool.query(
-      `INSERT INTO guests (name, flight, airline, airline_name, origin, eta, status, car_assigned) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+      `INSERT INTO guests (name, phone, flight, airline, airline_name, origin, eta, status, car_assigned) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
        RETURNING *`,
-      [name, flight, airline, airlineName, origin, eta, status || 'On Time', carAssigned || null]
+      [name, phone || null, flight, airline, airlineName, origin, eta, status || 'On Time', carAssigned || null]
     );
     
     const row = result.rows[0];
     const guest = {
       id: row.id,
       name: row.name,
+      phone: row.phone || '',
       flight: row.flight,
       airline: row.airline,
       airlineName: row.airline_name,
@@ -181,15 +185,15 @@ app.post('/api/guests', async (req, res) => {
 app.put('/api/guests/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, flight, airline, airlineName, origin, eta, status, carAssigned } = req.body;
+    const { name, phone, flight, airline, airlineName, origin, eta, status, carAssigned } = req.body;
     
     const result = await pool.query(
       `UPDATE guests 
-       SET name = $1, flight = $2, airline = $3, airline_name = $4, origin = $5, 
-           eta = $6, status = $7, car_assigned = $8, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9 
+       SET name = $1, phone = $2, flight = $3, airline = $4, airline_name = $5, origin = $6, 
+           eta = $7, status = $8, car_assigned = $9, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $10 
        RETURNING *`,
-      [name, flight, airline, airlineName, origin, eta, status, carAssigned, id]
+      [name, phone || null, flight, airline, airlineName, origin, eta, status, carAssigned, id]
     );
     
     if (result.rows.length === 0) {
@@ -200,6 +204,7 @@ app.put('/api/guests/:id', async (req, res) => {
     const guest = {
       id: row.id,
       name: row.name,
+      phone: row.phone || '',
       flight: row.flight,
       airline: row.airline,
       airlineName: row.airline_name,
