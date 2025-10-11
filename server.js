@@ -75,11 +75,6 @@ app.get('/api/guests', async (req, res) => {
               }
             }
 
-            // Check if flight date is in the past
-            const flightDate = new Date(guest.eta);
-            const now = new Date();
-            if (flightDate < now && newStatus === 'On Time') {
-              newStatus = 'Landed';
             }
 
             await pool.query('UPDATE guests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [newStatus, guest.id]);
@@ -87,14 +82,7 @@ app.get('/api/guests', async (req, res) => {
           }
         } catch (apiError) {
           console.error('API error for flight:', guest.flight, apiError.message);
-          
-          // Fallback: Check if flight is in the past
-          const flightDate = new Date(guest.eta);
-          const now = new Date();
-          if (flightDate < now && guest.status === 'On Time') {
-            await pool.query('UPDATE guests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['Landed', guest.id]);
-            guest.status = 'Landed';
-          }
+          // Don't change status if API call fails - keep existing status
         }
       }
     }
