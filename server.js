@@ -47,6 +47,11 @@ app.get('/api/guests', async (req, res) => {
 
     // Update flight statuses from API ONLY
     for (let guest of guests) {
+      // Skip API call if flight already landed or cancelled - status won't change
+      if (guest.status === 'Landed' || guest.status === 'Cancelled') {
+        continue;
+      }
+      
       if (guest.flight && guest.airline && guest.origin) {
         try {
           const response = await axios.get('http://api.aviationstack.com/v1/flights', {
