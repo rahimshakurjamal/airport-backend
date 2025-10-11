@@ -4,7 +4,7 @@ import pg from 'pg';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import multer from 'multer';
-import XLSX from 'xlsx';
+import * as XLSX from 'xlsx';
 
 dotenv.config();
 
@@ -29,12 +29,13 @@ pool.query(`
     phone VARCHAR(50),
     flight VARCHAR(50) NOT NULL,
     airline VARCHAR(10),
+    airline_name VARCHAR(100),
     origin VARCHAR(10),
-    destination VARCHAR(10),
     eta TIMESTAMP,
     status VARCHAR(50) DEFAULT 'On Time',
     car_assigned INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
 `).catch(err => console.error('Table creation error:', err));
 
@@ -81,7 +82,7 @@ app.get('/api/guests', async (req, res) => {
               newStatus = 'Landed';
             }
 
-            await pool.query('UPDATE guests SET status = $1 WHERE id = $2', [newStatus, guest.id]);
+            await pool.query('UPDATE guests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [newStatus, guest.id]);
             guest.status = newStatus;
           }
         } catch (apiError) {
@@ -91,7 +92,7 @@ app.get('/api/guests', async (req, res) => {
           const flightDate = new Date(guest.eta);
           const now = new Date();
           if (flightDate < now && guest.status === 'On Time') {
-            await pool.query('UPDATE guests SET status = $1 WHERE id = $2', ['Landed', guest.id]);
+            await pool.query('UPDATE guests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['Landed', guest.id]);
             guest.status = 'Landed';
           }
         }
@@ -100,6 +101,7 @@ app.get('/api/guests', async (req, res) => {
 
     res.json(guests);
   } catch (error) {
+    console.error('Error fetching guests:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -107,13 +109,14 @@ app.get('/api/guests', async (req, res) => {
 // Add guest
 app.post('/api/guests', async (req, res) => {
   try {
-    const { name, phone, flight, airline, origin, destination, eta } = req.body;
+    const { name, phone, flight, airline, origin, eta } = req.body;
     const result = await pool.query(
-      'INSERT INTO guests (name, phone, flight, airline, origin, destination, eta) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [name, phone || null, flight, airline, origin, destination, eta]
+      'INSERT INTO guests (name, phone, flight, airline, origin, eta) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [name, phone || null, flight, airline, origin, eta]
     );
     res.json(result.rows[0]);
   } catch (error) {
+    console.error('Error adding guest:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -122,13 +125,14 @@ app.post('/api/guests', async (req, res) => {
 app.put('/api/guests/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone, flight, airline, origin, destination, eta, status, car_assigned } = req.body;
+    const { name, phone, flight, airline, origin, eta, status, car_assigned } = req.body;
     const result = await pool.query(
-      'UPDATE guests SET name = $1, phone = $2, flight = $3, airline = $4, origin = $5, destination = $6, eta = $7, status = $8, car_assigned = $9 WHERE id = $10 RETURNING *',
-      [name, phone || null, flight, airline, origin, destination, eta, status, car_assigned, id]
+      'UPDATE guests SET name = $1, phone = $2, flight = $3, airline = $4, origin = $5, eta = $6, status = $7, car_assigned = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9 RETURNING *',
+      [name, phone || null, flight, airline, origin, eta, status, car_assigned, id]
     );
     res.json(result.rows[0]);
   } catch (error) {
+    console.error('Error updating guest:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -140,6 +144,7 @@ app.delete('/api/guests/:id', async (req, res) => {
     await pool.query('DELETE FROM guests WHERE id = $1', [id]);
     res.json({ message: 'Guest deleted' });
   } catch (error) {
+    console.error('Error deleting guest:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -164,7 +169,7 @@ app.post('/api/assign-cars', async (req, res) => {
       for (let i = 0; i < flightGuests.length; i += 5) {
         const carGuests = flightGuests.slice(i, i + 5);
         for (const guest of carGuests) {
-          await pool.query('UPDATE guests SET car_assigned = $1 WHERE id = $2', [carId, guest.id]);
+          await pool.query('UPDATE guests SET car_assigned = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [carId, guest.id]);
         }
         carId++;
       }
@@ -172,6 +177,7 @@ app.post('/api/assign-cars', async (req, res) => {
 
     res.json({ message: 'Cars assigned successfully' });
   } catch (error) {
+    console.error('Error assigning cars:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -186,13 +192,14 @@ app.post('/api/bulk-upload', upload.single('file'), async (req, res) => {
     for (const row of data) {
       const eta = row.date && row.time ? `${row.date}T${row.time}:00` : new Date().toISOString();
       await pool.query(
-        'INSERT INTO guests (name, phone, flight, airline, origin, destination, eta) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [row.name, row.phone || null, row.flight, row.airline, row.origin, row.destination, eta]
+        'INSERT INTO guests (name, phone, flight, airline, origin, eta) VALUES ($1, $2, $3, $4, $5, $6)',
+        [row.name, row.phone || null, row.flight, row.airline, row.origin, eta]
       );
     }
 
     res.json({ message: 'Bulk upload successful' });
   } catch (error) {
+    console.error('Bulk upload error:', error);
     res.status(500).json({ error: error.message });
   }
 });
