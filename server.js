@@ -45,7 +45,7 @@ app.get('/api/guests', async (req, res) => {
     const result = await pool.query('SELECT * FROM guests ORDER BY eta ASC');
     const guests = result.rows;
 
-    // Update flight statuses
+    // Update flight statuses from API ONLY
     for (let guest of guests) {
       if (guest.flight && guest.airline && guest.origin) {
         try {
@@ -58,23 +58,22 @@ app.get('/api/guests', async (req, res) => {
 
           if (response.data.data && response.data.data.length > 0) {
             const flight = response.data.data[0];
-            let newStatus = 'On Time';
-
-            if (flight.flight_status === 'cancelled') {
-              newStatus = 'Cancelled';
-            } else if (flight.flight_status === 'landed') {
-              newStatus = 'Landed';
-            } else if (flight.flight_status === 'active' || flight.flight_status === 'scheduled') {
-              const estimatedArrival = new Date(flight.arrival.estimated || flight.arrival.scheduled);
-              const scheduledArrival = new Date(flight.arrival.scheduled);
-              
-              if (estimatedArrival > scheduledArrival) {
-                newStatus = 'Delayed';
-              } else {
-                newStatus = 'On Time';
-              }
-            }
-
+            
+            // Map API flight_status directly - no calculations, no assumptions
+            const apiStatus = flight.flight_status?.toLowerCase();
+            let newStatus = 'On Time'; // default if unknown status
+            
+            // Map API status directly to our statuses
+            const statusMap = {
+              'cancelled': 'Cancelled',
+              'landed': 'Landed',
+              'delayed': 'Delayed',
+              'active': 'On Time',
+              'scheduled': 'On Time'
+            };
+            
+            if (statusMap[apiStatus]) {
+              newStatus = statusMap[apiStatus];
             }
 
             await pool.query('UPDATE guests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [newStatus, guest.id]);
